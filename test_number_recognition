@@ -1,0 +1,75 @@
+def resize_image(img, size=(28,28)):
+
+    h, w = img.shape[:2]
+    c = img.shape[2] if len(img.shape)>2 else 1
+
+    if h == w: 
+        return cv2.resize(img, size, cv2.INTER_AREA)
+
+    dif = h if h > w else w
+
+    interpolation = cv2.INTER_AREA if dif > (size[0]+size[1])//2 else  cv2.INTER_CUBIC
+    x_pos = (dif - w)//2
+    y_pos = (dif - h)//2
+
+    if len(img.shape) == 2:
+        mask = np.zeros((dif, dif), dtype=img.dtype)
+        mask[y_pos:y_pos+h, x_pos:x_pos+w] = img[:h, :w]
+    else:
+        mask = np.zeros((dif, dif, c), dtype=img.dtype)
+        mask[y_pos:y_pos+h, x_pos:x_pos+w, :] = img[:h, :w, :]
+
+    return cv2.resize(mask, size, interpolation)
+
+
+
+import cv2
+#import os
+#os.environ["CUDA_VISIBLE_DEVICES"]="-1" 
+import tensorflow as tf
+
+print(tf.__version__)
+model = tf.keras.models.load_model('model')
+
+from numpy import asarray
+from numpy import argmax
+import numpy as np
+from tensorflow.keras.datasets.mnist import load_data
+# normalize pixel values
+#x_train = x_train.astype('float32') / 255.0
+#image = x_train[2]
+#image=cv2.imread("test.jpg", 0)
+image=cv2.imread("test.jpg")
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+edged = cv2.Canny(blurred, 30, 150)
+#cv2.imwrite('t2.jpg',edged)
+cnts,_ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+cnt = cnts[0]
+#print(len(cnts))
+#print(cnts[0])
+(x, y, w, h) = cv2.boundingRect(cnts[0])
+roi = gray[y:y + h, x:x + w]
+thresh = cv2.threshold(roi, 0, 255,cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+
+(tH, tW) = thresh.shape
+maxHW=tH
+if tW>tH:
+    maxHW=tW
+
+#img = cv2.resize(thresh,(28,28))
+img = resize_image(thresh,(20,20))
+pad=4
+img= cv2.copyMakeBorder(img, top=pad, bottom=pad,
+			left=pad, right=pad, borderType=cv2.BORDER_CONSTANT,
+			value=(0, 0, 0))
+
+cv2.imwrite('t.jpg',img)
+img = img.reshape((img.shape[0], img.shape[1], 1))
+img = img.astype('float')/255.0
+yhat = model.predict(asarray([img]))
+print('Predicted: class=%d' % argmax(yhat))
+print(yhat)
+
+
+
